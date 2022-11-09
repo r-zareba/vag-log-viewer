@@ -4,7 +4,7 @@ Sunday,06,November,2022,12:19:21
 ,Group A:,'130,,,,Group B:,'131,,,,Group C:,'134
 ,,Temperature,Temperature,Load, ,,Temperature,Temperature,Temperature,Load,,Temperature,Temperature,Temperature,Temperature
 ,TIME,,,,,TIME,,,,,TIME,,,,
-MARKER,STAMP,캜,캜,%,,STAMP,캜,캜,캜,%,STAMP,캜,캜,캜,캜
+MARKER,STAMP,째C,째C,%,,STAMP,째C,째C,째C,%,STAMP,째C,째C,째C,째C
 ,0.10,99.0,17.0,16.9, ,0.29,99.0,100.0,17.0,16.9,0.46,76.0,7.0,39.0,99.0
 ,0.62,99.0,17.0,16.9, ,0.81,99.0,100.0,17.0,16.9,0.99,76.0,7.0,39.0,99.0
 ,1.18,99.0,17.0,16.9, ,1.36,99.0,100.0,17.0,16.9,1.55,76.0,7.0,39.0,99.0

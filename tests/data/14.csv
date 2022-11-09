@@ -4,7 +4,7 @@ Monday,07,November,2022,15:56:23:00009-VCID:6ED37BBF7A970CFDA1-515A,VCDS Version
 ,Group A:,'134,,,,Group B:, Not Running,,,,Group C:, Not Running
 ,,Oil Temperature,Ambient,Intake Air,Engine Outlet,,,,,,,,,,
 ,TIME,,Temperature,Temperature (G42),Temperature,TIME,,,,,TIME,,,,
-Marker,STAMP,캜,캜,캜,캜,STAMP,,,,,STAMP,,,,
+Marker,STAMP,째C,째C,째C,째C,STAMP,,,,,STAMP,,,,
 ,0.09,7.0,8.5,12.0,7.0,,,,,,,,,,
 ,0.27,7.0,8.5,12.0,7.0,,,,,,,,,,
 ,0.45,7.0,8.5,12.0,7.0,,,,,,,,,,
