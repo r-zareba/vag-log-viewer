@@ -1,9 +1,12 @@
 import abc
 import csv
+import io
 import os.path
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Union
 
 Row = list[str]
 
@@ -19,15 +22,19 @@ class VAGLog:
     data: dict
 
 
+# TODO VagLogFactory seperate from VagLogReaderFactory(?)
 class VagLogReaderFactory:
     __slots__ = ('_source', )
 
-    def __init__(self, source: str):
+    def __init__(self, source: Union[str, bytes, Path, io.StringIO]):
         self._source = source
 
     def generate_vaglog(self) -> VAGLog:
-        if os.path.isfile(self._source) and self._source.lower().endswith('.csv'):
-            return CsvVagLogReader(self._source).generate_vaglog()
+        if isinstance(self._source, (str, Path)):
+            if os.path.isfile(self._source) and self._source.lower().endswith('.csv'):
+                return CsvVagLogReader(self._source).generate_vaglog()
+        elif isinstance(self._source, io.StringIO):
+            return CsvBufferVagLogReader(self._source).generate_vaglog()
 
 
 class VagLogReader(abc.ABC):
@@ -37,15 +44,14 @@ class VagLogReader(abc.ABC):
 
 
 class CsvVagLogReader(VagLogReader):
-    __slots__ = ('_filepath', '_labels_list', '_labels', '_timestamp', '_vcds_version',
+    __slots__ = ('_filepath', '_labels', '_labels', '_timestamp', '_vcds_version',
                  '_vcds_data_version', '_car_controller', '_engine_type', '_measure_groups', '_data')
 
     MEASURE_GROUP_SIZE = 5
 
-    def __init__(self, filepath: str):
-        self._filepath = filepath
-        self._labels_list = list()
-        self._labels = defaultdict(list)
+    def __init__(self, log_data: Union[str, bytes, Path, io.StringIO]):
+        self._log_data = log_data
+        self._labels = list()
 
         self._timestamp = ''
         self._vcds_version = ''
@@ -54,18 +60,6 @@ class CsvVagLogReader(VagLogReader):
         self._engine_type = ''
         self._measure_groups = tuple()
         self._data = defaultdict(dict)
-
-    def generate_vaglog(self) -> VAGLog:
-        self._process_logfile()
-        return VAGLog(
-            self._timestamp,
-            self._vcds_version,
-            self._vcds_data_version,
-            self._car_controller,
-            self._engine_type,
-            self._measure_groups,
-            self._data
-        )
 
     @staticmethod
     def is_binary(text: str) -> bool:
@@ -76,35 +70,45 @@ class CsvVagLogReader(VagLogReader):
             return True
         return False
 
-    def _process_logfile(self):
-        with open(self._filepath) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=",")
+    def generate_vaglog(self) -> VAGLog:
+        self._process_log_data()
+        self._cleanup_data_structure()
+
+        return VAGLog(
+            self._timestamp,
+            self._vcds_version,
+            self._vcds_data_version,
+            self._car_controller,
+            self._engine_type,
+            self._measure_groups,
+            self._data
+        )
+
+    def _process_log_data(self):
+        with open(self._log_data) as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
 
             for idx, row in enumerate(csv_reader):
-                match idx:
-                    case 0:
-                        self._process_timestamp_vcds_row(row)
-                    case 1:
-                        self._process_controller_engine_row(row)
-                    case 3:
-                        self._process_measure_groups(row)
-                    case 4:
-                        self._create_labels(row)
-                    case 5:
-                        self._concat_labels(row)
-                    case 6:
-                        self._process_measure_units(row)
-                        self._set_labels_dict()
-                        self._handle_duplicated_labels()
-                        self._set_data_structure()
-                    case _:
-                        self._process_data_row(row)
+                self._process_log_row(idx, row)
 
-        # Convert data values to be tuple type
-        for key in self._data:
-            for label in self._data[key]:
-                self._data[key][label] = tuple(self._data[key][label])
-        self._data = dict(self._data)
+    def _process_log_row(self, idx: int, row: Row):
+        match idx:
+            case 0:
+                self._process_timestamp_vcds_row(row)
+            case 1:
+                self._process_controller_engine_row(row)
+            case 3:
+                self._process_measure_groups(row)
+            case 4:
+                self._create_labels(row)
+            case 5:
+                self._concat_labels(row)
+            case 6:
+                self._process_measure_units(row)
+                self._handle_duplicated_labels()
+                self._set_data_structure()
+            case _:
+                self._process_data_row(row)
 
     def _process_timestamp_vcds_row(self, row: Row):
         timestamp = row[4].split('-')[0]
@@ -124,59 +128,68 @@ class CsvVagLogReader(VagLogReader):
         self._measure_groups = tuple(i for i in cleaned_row if i.replace('\'', '').isdigit())
 
     def _create_labels(self, row: Row):
-        self._labels_list = row
+        self._labels = row
 
     def _concat_labels(self, row: Row):
-        for i in range(len(self._labels_list)):
-            self._labels_list[i] += f' {row[i]}'
-        self._labels_list = [x.strip() for x in self._labels_list]
+        for i in range(len(self._labels)):
+            self._labels[i] += f' {row[i]}'
+        self._labels = [x.strip() for x in self._labels]
 
     def _process_measure_units(self, row: Row):
-        for i, label in enumerate(self._labels_list):
+        for i, label in enumerate(self._labels):
             if 'TIME' in label.upper() or not label:
-                self._labels_list[i] += row[i]
+                self._labels[i] += row[i]
             else:
-                self._labels_list[i] += f' [{row[i].strip()}]'
-
-    def _set_labels_dict(self):
-        i = 1
-        for group in self._measure_groups:
-            for j in range(i, i + self.MEASURE_GROUP_SIZE):
-                label = self._labels_list[j]
-                if label:
-                    self._labels[group].append(label)
-            i += self.MEASURE_GROUP_SIZE
+                self._labels[i] += f' [{row[i].strip()}]'
 
     def _handle_duplicated_labels(self):
-        for group in self._labels:
-            group_labels = self._labels[group]
-            counted_labels = Counter(group_labels)
-            for label in group_labels:
-                n_occurrences = counted_labels[label]
-                if n_occurrences > 1:
-                    for count in range(1, n_occurrences+1):
-                        self._labels[group][group_labels.index(label)] = f'{label} ({count})'
+        for label in self._labels:
+            if not label:
+                continue
+            counted_labels = Counter(self._labels)
+            n_occurrences = counted_labels[label]
+            if n_occurrences > 1:
+                for count in range(1, n_occurrences + 1):
+                    self._labels[self._labels.index(label)] = f'{label} ({count})'
 
     def _set_data_structure(self):
-        for group, labels in self._labels.items():
-            for label in labels:
-                self._data[group][label] = list()
+        group_index = 1
+
+        for group in self._measure_groups:
+            for j in range(group_index, group_index + self.MEASURE_GROUP_SIZE):
+                label = self._labels[j]
+                if label:
+                    self._data[group][label] = list()
+
+            group_index += self.MEASURE_GROUP_SIZE
 
     def _process_data_row(self, row: Row):
         group_index = 1
 
         for group in self._measure_groups:
-            label_index = 0
             for j in range(group_index, group_index + self.MEASURE_GROUP_SIZE):
                 value = row[j].replace(' ', '')
                 if not value:
                     continue
 
-                label = self._labels[group][label_index]
-
+                label = self._labels[j]
                 if self.is_binary(value):
                     self._data[group][label].append(row[j])
                 else:
                     self._data[group][label].append(float(row[j]))
-                label_index += 1
+
             group_index += self.MEASURE_GROUP_SIZE
+
+    def _cleanup_data_structure(self):
+        # Convert data values to be tuple type
+        for key in self._data:
+            for label in self._data[key]:
+                self._data[key][label] = tuple(self._data[key][label])
+        self._data = dict(self._data)
+
+
+class CsvBufferVagLogReader(CsvVagLogReader):
+    def _process_log_data(self):
+        for idx, row in enumerate(self._log_data):
+            row = row.replace('\n', '').replace('\r', '').split(',')
+            self._process_log_row(idx, row)

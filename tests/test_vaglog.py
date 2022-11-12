@@ -20,8 +20,8 @@ def get_all_test_files_paths() -> list[str]:
 
 @pytest.mark.parametrize('logfile_path', get_all_test_files_paths())
 def test_vaglog_reader_run(logfile_path: str):
-    vag_log = get_vaglog_for_test(logfile_path)
-    assert vag_log
+    vaglog = get_vaglog_for_test(logfile_path)
+    assert vaglog
 
 
 @pytest.mark.parametrize('logfile,groups_len_expected', [
@@ -41,7 +41,10 @@ def test_vaglog_reader_run(logfile_path: str):
     ('14.csv', 1),
     ('15.csv', 3),
     ('16.csv', 2),
-    ('17.csv', 3)
+    ('17.csv', 3),
+    ('18.csv', 1),
+    ('19.csv', 3),
+    ('20.csv', 3)
 ])
 def test_measure_groups_len(logfile: str, groups_len_expected: int):
     path = os.path.join(TEST_DATA_DIR, logfile)
@@ -66,7 +69,10 @@ def test_measure_groups_len(logfile: str, groups_len_expected: int):
     ('14.csv', 160),
     ('15.csv', 46),
     ('16.csv', 15),
-    ('17.csv', 16)
+    ('17.csv', 16),
+    ('18.csv', 29),
+    ('19.csv', 24),
+    ('20.csv', 11),
 ])
 def test_data_rows_len(logfile: str, data_rows_len_expected: int):
     path = os.path.join(TEST_DATA_DIR, logfile)
@@ -78,8 +84,14 @@ def test_data_rows_len(logfile: str, data_rows_len_expected: int):
             assert len(vaglog.data[group][label]) == data_rows_len_expected
 
 
+@pytest.mark.parametrize('logfile_path', get_all_test_files_paths())
+def test_vaglog_labels_uniqueness(logfile_path: str):
+    vaglog = get_vaglog_for_test(logfile_path)
+    n_total_labels = sum(len(vaglog.data[x]) for x in vaglog.data)
 
+    merged_data = dict()
+    for measure_group in vaglog.data:
+        merged_data = merged_data | vaglog.data[measure_group]
 
-
-
-
+    # Number of summed labels should be same as dict merging result (No duplicated keys in the vaglog data)
+    assert n_total_labels == len(merged_data)
